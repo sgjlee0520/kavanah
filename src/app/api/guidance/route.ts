@@ -1,5 +1,5 @@
 import { deepseek } from "@ai-sdk/deepseek";
-import { generateText } from "ai";
+import { streamText } from "ai";
 
 export async function POST(req: Request) {
     try {
@@ -28,27 +28,28 @@ export async function POST(req: Request) {
       - Ensure the Hebrew is properly formatted for right-to-left reading (standard text, no special characters conflicting with RTL).
     `;
 
-        const { text } = await generateText({
+        if (!process.env.DEEPSEEK_API_KEY) {
+            console.error("Missing DEEPSEEK_API_KEY environment variable");
+            return new Response(
+                JSON.stringify({ error: "Configuration Error: API Key missing." }),
+                { status: 500, headers: { "Content-Type": "application/json" } }
+            );
+        }
+
+        const result = await streamText({
             model: deepseek("deepseek-chat"),
             system: systemPrompt,
             prompt: prompt,
         });
 
-        // Validating JSON somewhat by ensuring it's not wrapped in code blocks, or cleaning it
-        let cleanText = text.trim();
-        if (cleanText.startsWith("```json")) {
-            cleanText = cleanText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-        } else if (cleanText.startsWith("```")) {
-            cleanText = cleanText.replace(/^```\s*/, "").replace(/\s*```$/, "");
-        }
-
-        return new Response(cleanText, {
-            headers: { "Content-Type": "application/json" },
-        });
-    } catch (error) {
+        return result.toTextStreamResponse();
+    } catch (error: any) {
         console.error("Error generating guidance:", error);
         return new Response(
-            JSON.stringify({ error: "Failed to seek wisdom at this time." }),
+            JSON.stringify({
+                error: "Failed to seek wisdom at this time.",
+                details: error.message || "Unknown error"
+            }),
             { status: 500, headers: { "Content-Type": "application/json" } }
         );
     }
