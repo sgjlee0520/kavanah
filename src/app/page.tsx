@@ -6,7 +6,6 @@ import { useCompletion } from "@ai-sdk/react";
 export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [parseError, setParseError] = useState<string | null>(null);
 
   const {
     completion,
@@ -17,12 +16,9 @@ export default function Home() {
   } = useCompletion({
     api: "/api/guidance",
     onError: (err) => {
-      setError(err.message);
+      console.error("API ERROR:", err.message);
+      setError(`API Error: ${err.message}`);
       setHasSubmitted(false); // Allow retry on API error
-    },
-    onFinish: () => {
-      // Streaming complete - if we still can't parse, surface the error
-      // This runs after the final completion value is set
     },
   });
 
@@ -30,7 +26,6 @@ export default function Home() {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     setHasSubmitted(true);
     setError(null);
-    setParseError(null);
     originalHandleSubmit(e);
   };
 
@@ -49,12 +44,9 @@ export default function Home() {
         try {
           return JSON.parse(jsonMatch[1].trim());
         } catch (e2) {
-          // Still can't parse - only show error if NOT loading (streaming complete)
+          // Still can't parse
         }
       }
-
-      // If loading is done and we still can't parse, it's a real failure
-      // We check this outside the memo via effect
       return null;
     }
   }, [completion]);
@@ -66,7 +58,6 @@ export default function Home() {
   const handleReset = () => {
     setHasSubmitted(false);
     setError(null);
-    setParseError(null);
     window.location.reload();
   };
 
