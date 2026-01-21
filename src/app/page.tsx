@@ -1,32 +1,74 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useCompletion } from "@ai-sdk/react";
 
 export default function Home() {
   const [error, setError] = useState<string | null>(null);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
 
   const {
     completion,
     input,
     handleInputChange,
-    handleSubmit,
+    handleSubmit: originalHandleSubmit,
     isLoading,
   } = useCompletion({
     api: "/api/guidance",
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      setError(err.message);
+      setHasSubmitted(false); // Allow retry on API error
+    },
+    onFinish: () => {
+      // Streaming complete - if we still can't parse, surface the error
+      // This runs after the final completion value is set
+    },
   });
 
+  // Wrap handleSubmit to track submission state
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    setHasSubmitted(true);
+    setError(null);
+    setParseError(null);
+    originalHandleSubmit(e);
+  };
+
   // Parse valid JSON from the completion string if it exists
-  let responseData = null;
-  if (completion) {
+  // Use useMemo to avoid re-parsing on every render
+  const responseData = useMemo(() => {
+    if (!completion) return null;
+
     try {
-      responseData = JSON.parse(completion);
+      // First, try direct parse
+      return JSON.parse(completion);
     } catch (e) {
-      // In case of streaming partial JSON, we might not be able to parse yet
-      // This is a simple MVP approach; for production, use object generation or safer parsing
+      // LLM might wrap JSON in markdown code fences - strip them
+      const jsonMatch = completion.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[1].trim());
+        } catch (e2) {
+          // Still can't parse - only show error if NOT loading (streaming complete)
+        }
+      }
+
+      // If loading is done and we still can't parse, it's a real failure
+      // We check this outside the memo via effect
+      return null;
     }
-  }
+  }, [completion]);
+
+  // Track parse failure AFTER streaming is complete
+  const showParseError = !isLoading && hasSubmitted && completion && !responseData;
+
+  // Reset function for clean state
+  const handleReset = () => {
+    setHasSubmitted(false);
+    setError(null);
+    setParseError(null);
+    window.location.reload();
+  };
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-4 bg-royal-blue-900 text-white relative overflow-hidden">
@@ -47,8 +89,8 @@ export default function Home() {
           </p>
         </header>
 
-        {/* Input Form */}
-        {!responseData && !isLoading && (
+        {/* Input Form - Only show if NOT submitted (prevents reset on parse failure) */}
+        {!hasSubmitted && !isLoading && (
           <form
             onSubmit={handleSubmit}
             className="w-full max-w-lg transition-all transform duration-700 ease-in-out"
@@ -71,6 +113,21 @@ export default function Home() {
             </div>
             {error && <p className="text-red-400 mt-2 text-center text-sm">{error}</p>}
           </form>
+        )}
+
+        {/* Parse Error State - Show when streaming complete but JSON invalid */}
+        {showParseError && (
+          <div className="w-full max-w-lg bg-red-500/10 border border-red-400/30 rounded-xl p-6 text-center space-y-4">
+            <p className="text-red-300 text-sm">
+              We received wisdom, but couldn't interpret it. Please try again.
+            </p>
+            <button
+              onClick={handleReset}
+              className="text-white/60 hover:text-white transition-colors text-sm uppercase tracking-widest"
+            >
+              Try Again
+            </button>
+          </div>
         )}
 
         {/* Loading State */}
@@ -121,7 +178,7 @@ export default function Home() {
             {/* Reset Button */}
             <div className="text-center pt-4">
               <button
-                onClick={() => window.location.reload()}
+                onClick={handleReset}
                 className="text-white/40 hover:text-white transition-colors text-sm uppercase tracking-widest"
               >
                 Ask Another Question
