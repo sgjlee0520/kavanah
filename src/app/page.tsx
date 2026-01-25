@@ -80,24 +80,24 @@ export default function Home() {
           </p>
         </header>
 
-        {/* Input Form - Only show if NOT submitted (prevents reset on parse failure) */}
-        {!hasSubmitted && !isLoading && (
+        {/* Input Form - Show unless there's a successful response */}
+        {!responseData && (
           <form
             onSubmit={handleSubmit}
             className="w-full max-w-lg transition-all transform duration-700 ease-in-out"
           >
             <div className="relative group">
-              <input
-                type="text"
+              <textarea
                 value={input}
                 onChange={handleInputChange}
                 placeholder="Ex: I feel anxious about my future..."
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-6 py-4 text-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-silver-400/50 focus:bg-white/10 transition-all shadow-2xl backdrop-blur-sm"
+                disabled={isLoading}
+                className="w-full min-h-20 max-h-48 bg-white/5 border border-white/10 rounded-xl px-6 py-4 text-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-silver-400/50 focus:bg-white/10 transition-all shadow-2xl backdrop-blur-sm resize-none overflow-y-auto disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
-                disabled={!input.trim()}
-                className="absolute right-2 top-2 bottom-2 px-6 bg-silver-200 hover:bg-white text-royal-blue-900 font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                disabled={!input.trim() || isLoading}
+                className="absolute right-2 top-2 px-6 bg-silver-200 hover:bg-white text-royal-blue-900 font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
                 Seek
               </button>
