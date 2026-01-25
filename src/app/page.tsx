@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useCompletion } from "@ai-sdk/react";
 
 export default function Home() {
@@ -16,11 +16,21 @@ export default function Home() {
   } = useCompletion({
     api: "/api/guidance",
     onError: (err) => {
-      console.error("API ERROR:", err.message);
+      console.error("API ERROR:", err);
       setError(`API Error: ${err.message}`);
       setHasSubmitted(false); // Allow retry on API error
     },
+    onFinish: (message) => {
+      console.log("Stream finished. Completion:", message);
+    },
   });
+
+  // Log completion changes for debugging
+  useEffect(() => {
+    if (completion) {
+      console.log("Completion updated:", completion);
+    }
+  }, [completion]);
 
   // Wrap handleSubmit to track submission state
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -38,13 +48,23 @@ export default function Home() {
       // First, try direct parse
       return JSON.parse(completion);
     } catch (e) {
+      console.error("Direct parse failed:", e);
       // LLM might wrap JSON in markdown code fences - strip them
       const jsonMatch = completion.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
         try {
           return JSON.parse(jsonMatch[1].trim());
         } catch (e2) {
-          // Still can't parse
+          console.error("Markdown-wrapped parse failed:", e2);
+        }
+      }
+      // Try to extract JSON object even without markdown
+      const jsonObjectMatch = completion.match(/\{[\s\S]*\}/);
+      if (jsonObjectMatch) {
+        try {
+          return JSON.parse(jsonObjectMatch[0]);
+        } catch (e3) {
+          console.error("JSON object extraction failed:", e3);
         }
       }
       return null;
@@ -53,6 +73,13 @@ export default function Home() {
 
   // Track parse failure AFTER streaming is complete
   const showParseError = !isLoading && hasSubmitted && completion && !responseData;
+  
+  // Debug: Log when parse error occurs
+  useEffect(() => {
+    if (showParseError) {
+      console.error("Parse error - completion received but couldn't parse:", completion);
+    }
+  }, [showParseError, completion]);
 
   // Reset function for clean state
   const handleReset = () => {
@@ -110,7 +137,10 @@ export default function Home() {
         {showParseError && (
           <div className="w-full max-w-lg bg-red-500/10 border border-red-400/30 rounded-xl p-6 text-center space-y-4">
             <p className="text-red-300 text-sm">
-              We received wisdom, but couldn't interpret it. Please try again.
+              We received wisdom, but couldn't interpret it. Please check the browser console for details.
+            </p>
+            <p className="text-red-200 text-xs font-mono break-words max-h-32 overflow-y-auto bg-red-950/30 p-2 rounded">
+              {completion?.substring(0, 200)}...
             </p>
             <button
               onClick={handleReset}
