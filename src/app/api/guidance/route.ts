@@ -20,7 +20,7 @@ SCHEMA:
   "hebrew": "Hebrew text with nikkud (vowels)",
   "englishTranslation": "English translation (use 'Hashem' for God)",
   "source": "Citation (e.g., Tehillim 23:4)",
-  "insight": "Exactly 3 sentences connecting the source to the user's struggle."
+  "insight": "A thoughtful, compassionate response of 12-15 sentences connecting the source to the user's struggle. Explore the deeper meaning of the text, how it applies to their situation, and provide practical spiritual guidance."
 }
 
 RULES:

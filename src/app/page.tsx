@@ -1,29 +1,19 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useCompletion } from "@ai-sdk/react";
 
 export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [isLoadingLocal, setIsLoadingLocal] = useState(false);
+  const [completion, setCompletion] = useState("");
 
-  const {
-    completion,
-    input,
-    handleInputChange,
-    handleSubmit: originalHandleSubmit,
-    isLoading,
-  } = useCompletion({
-    api: "/api/guidance",
-    onError: (err) => {
-      console.error("API ERROR:", err);
-      setError(`API Error: ${err.message}`);
-      setHasSubmitted(false); // Allow retry on API error
-    },
-    onFinish: (message) => {
-      console.log("Stream finished. Completion:", message);
-    },
-  });
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newInput = e.target.value;
+    setInput(newInput);
+  };
+
+  const [input, setInput] = useState("");
 
   // Log completion changes for debugging
   useEffect(() => {
@@ -32,11 +22,57 @@ export default function Home() {
     }
   }, [completion]);
 
-  // Wrap handleSubmit to track submission state
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  // Wrap handleSubmit to track submission state and send proper payload
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    console.log("Form submitted with input:", input);
+    
+    if (!input.trim()) {
+      setError("Please enter a worry or question.");
+      return;
+    }
+
     setHasSubmitted(true);
     setError(null);
-    originalHandleSubmit(e);
+    setIsLoadingLocal(true);
+    setCompletion(""); // Clear previous completion
+
+    try {
+      // Call the API directly with proper payload
+      const response = await fetch("/api/guidance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: input }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          fullText += chunk;
+          setCompletion(fullText);
+        }
+        
+        console.log("Full response received:", fullText);
+      }
+    } catch (error) {
+      console.error("Stream error:", error);
+      setError(error instanceof Error ? error.message : "Failed to get response");
+      setHasSubmitted(false);
+    } finally {
+      setIsLoadingLocal(false);
+    }
   };
 
   // Parse valid JSON from the completion string if it exists
@@ -73,7 +109,7 @@ export default function Home() {
   }, [completion]);
 
   // Track parse failure AFTER streaming is complete
-  const showParseError = !isLoading && hasSubmitted && completion && !responseData;
+  const showParseError = !isLoadingLocal && hasSubmitted && completion && !responseData;
 
   // Debug: Log when parse error occurs
   useEffect(() => {
@@ -86,7 +122,8 @@ export default function Home() {
   const handleReset = () => {
     setHasSubmitted(false);
     setError(null);
-    window.location.reload();
+    setCompletion("");
+    setInput("");
   };
 
   return (
@@ -116,15 +153,16 @@ export default function Home() {
           >
             <div className="relative group">
               <textarea
+                name="prompt"
                 value={input}
                 onChange={handleInputChange}
                 placeholder="Ex: I feel anxious about my future..."
-                disabled={isLoading}
+                disabled={isLoadingLocal}
                 className="w-full min-h-20 max-h-48 bg-white/5 border border-white/10 rounded-xl px-6 py-4 text-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-silver-400/50 focus:bg-white/10 transition-all shadow-2xl backdrop-blur-sm resize-none overflow-y-auto disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || isLoadingLocal}
                 className="absolute right-2 top-2 px-6 bg-silver-200 hover:bg-white text-royal-blue-900 font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
                 Seek
@@ -153,7 +191,7 @@ export default function Home() {
         )}
 
         {/* Loading State */}
-        {isLoading && (
+        {isLoadingLocal && (
           <div className="flex flex-col items-center space-y-4 animate-pulse-gentle">
             <div className="w-16 h-16 border-t-2 border-r-2 border-silver-300 rounded-full animate-spin duration-[3000ms]"></div>
             <p className="text-silver-200 font-serif text-lg tracking-widest uppercase text-xs">
